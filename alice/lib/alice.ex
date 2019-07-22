@@ -4,27 +4,51 @@ defmodule Alice do
   def hello do
     url = "http://www.gutenberg.org/files/11/11-0.txt"
     book = get_book(url)
-    book_tf = term_frequency(book)
-    for {chapter, i} <- Enum.with_index(String.split(book, "chapter")) do
-      IO.puts("Chapter #{i}:")
-      tfidf = get_tfidf(book_tf, chapter)
-      for {word, freq} <- tfidf do
-        IO.puts("#{word}: #{freq}")
-      end
+    doc_freq  = term_frequency(book)
+    chapters = book |> String.split("chapter")
+    IO.puts(chapters |> length)
+    chapters
+      |> Enum.with_index()
+      |> Enum.map(fn {chapter, i} ->
+        words = []
+        words = term_frequency(chapter)
+          |> Enum.to_list()
+          |> Enum.map(fn {word, tf} ->
+            frequencies = []
+            df = doc_freq[word]
+            term = %{:value => tf/df, :word => word}
+            frequencies = frequencies ++ term
+            end)
+          |> Enum.sort_by(fn a -> a[:value] end)
+          |> Enum.take(-10)
+          |> Enum.map(fn term ->
+            words = words ++ term[:word]
+          end)
 
-      IO.puts("Chapter #{i} has #{String.length(chapter)}\n")
-    end
+        IO.puts("chapter #{i+1}:\n#{Enum.join(words, ", ")}\n")
+        end)
   end
 
   def get_book (url) do
     {_ok, resp} = HTTPoison.get(url)
-
-    book = resp.body
-    book = String.downcase(book)
-    for s <- ["\r", "\n", ".", ",", "!"] do
-      book = String.replace(book, s, " ")
-    end
-    book
+    resp.body
+      |> String.downcase()
+      |> String.replace("\r", " ")
+      |> String.replace("\n", " ")
+      |> String.replace("\t", " ")
+      |> String.replace(".", " ")
+      |> String.replace(",", " ")
+      |> String.replace("!", " ")
+      |> String.replace("?", " ")
+      |> String.replace("'", " ")
+      |> String.replace("\"", " ")
+      |> String.replace("“", " ")
+      |> String.replace("‘", " ")
+      |> String.replace("’", " ")
+      |> String.replace("-", " ")
+      |> String.replace("(", " ")
+      |> String.replace(")", " ")
+      |> String.replace(";", " ")
   end
 
   def get_chapter(chapter_number, book) do
@@ -37,23 +61,40 @@ defmodule Alice do
     true
   end
 
-  @spec get_tfidf(map, string) :: map
-  def get_tfidf(book_tf, chapter) do
+  @spec keywords(map, string) :: map
+  def keywords(book_tf, chapter) do
     tfidf = []
 
 
     tfidf = for {word, freq} <- term_frequency(chapter) do
-      tfidf = List.insert_at(tfidf, -1, %{:word => word, :value => freq/book_tf[word]})
+      if book_tf[word] > 5 do
+        tfidf = List.insert_at(tfidf, -1, %{:word => word, :value => freq/book_tf[word]})
+      end
     end
     IO.puts("have #{tfidf |> length} terms")
 
+    tfidf = Enum.sort_by(tfidf, fn (y) ->
+      x = 0
+      if y != nil and length(y) > 0 do
+        x = y |> List.first()
+#        IO.puts(x)
+        x = x[:value]
+      end
+      x
+    end)
 
-    tfidf = Enum.sort_by(tfidf, fn (x) -> x[:value] end)
-
-    Enum.each(tfidf, fn x ->
-      word = &x[:word]
-      value = &x[:value]
-      IO.puts("word #{word}: value #{value}")
+    tfidf = Enum.take(tfidf, -10)
+    Enum.each(tfidf, fn y ->
+      if y != nil and length(y) > 0 do
+  #      IO.puts("#{IEx.Info.info(y)}")
+        x = List.first(y)
+  #      IO.puts("#{IEx.Info.info(x)}")
+        word = x[:word]
+        value = x[:value]
+        IO.puts("#{word}:\t #{value}")
+        else
+        IO.puts("empty")
+      end
     end)
 
     tfidf
